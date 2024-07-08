@@ -12,10 +12,18 @@ def convert_to_ddmmss(value):
     seconds = round((value - degrees - minutes / 60) * 3600, 3)
     return f"{abs(degrees):02}° {abs(minutes):02}' {abs(seconds):06.3f}\""
 
+def ensure_string_columns(df):
+    for col in df.columns:
+        df[col] = df[col].astype(str)
+    return df
 
 def process_excel_file(input_filepath):
     df = pd.read_excel(input_filepath)
     
+    if 'ins_date' in df.columns:
+        df['ins_date'] = pd.to_datetime(df['ins_date']).dt.strftime('%Y-%m-%d')
+    
+    df = ensure_string_columns(df)
     
     file_directory = os.path.dirname(input_filepath)
     file_basename = os.path.basename(input_filepath)
@@ -25,7 +33,7 @@ def process_excel_file(input_filepath):
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['Easting'].astype(float), df['Northing'].astype(float)), crs="EPSG:3826")
     gdf['fid'] = range(1, len(gdf) + 1)
     gdf = gdf[['fid'] + [col for col in gdf.columns if col != 'fid']]
-    
+
     gdf4326 = gdf.to_crs(epsg=4326)
     gdf4326['lon'] = gdf4326.geometry.x
     gdf4326['lat'] = gdf4326.geometry.y
@@ -53,8 +61,11 @@ def process_excel_file(input_filepath):
     gdf_buffer = gdf.copy()
     gdf_buffer.set_geometry('buffer', inplace=True)
     
+    # Ensure ins_date is string before exporting to GeoJSON
+    if 'ins_date' in gdf_buffer.columns:
+        gdf_buffer['ins_date'] = gdf_buffer['ins_date'].astype(str)
     
-    gdf_buffer = gdf_buffer.drop(columns='geometry')
+    gdf_buffer = gdf_buffer.drop(columns=['geometry'])
     
     output_pinpile_geojson_filepath = os.path.join(file_directory, f"as_installed_pinpile_{date_str}.geojson")
     gdf_buffer.to_file(output_pinpile_geojson_filepath, driver='GeoJSON')
@@ -73,7 +84,7 @@ def process_excel_file(input_filepath):
     gdf4326['Lontitude'] = gdf4326['lon'].apply(convert_to_ddmmss)
     gdf4326['Latitude'] = gdf4326['lat'].apply(convert_to_ddmmss)
     
-    df_processed = pd.concat([df.drop(columns=['geometry']), gdf4326[['lon', 'lat', 'Lontitude', 'Latitude']]], axis=1)
+    df_processed = pd.concat([df, gdf4326[['lon', 'lat', 'Lontitude', 'Latitude']]], axis=1)
     
     with pd.ExcelWriter(input_filepath, mode='a', engine='openpyxl', if_sheet_exists='replace') as writer:
         df_processed.to_excel(writer, sheet_name='processed', index=False)
@@ -91,23 +102,28 @@ def process_excel_file(input_filepath):
 def process_csv_file(input_filepath):
     df = pd.read_csv(input_filepath)
     
+
+    df = ensure_string_columns(df)
+    
     file_directory = os.path.dirname(input_filepath)
     file_basename = os.path.basename(input_filepath)
     file_name, file_extension = os.path.splitext(file_basename)
     date_str = file_name.split('_')[-1]
     
+
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['Easting'].astype(float), df['Northing'].astype(float)), crs="EPSG:3826")
     gdf['fid'] = range(1, len(gdf) + 1)
     gdf = gdf[['fid'] + [col for col in gdf.columns if col != 'fid']]
-    
+
     gdf4326 = gdf.to_crs(epsg=4326)
     gdf4326['lon'] = gdf4326.geometry.x
     gdf4326['lat'] = gdf4326.geometry.y
     
+
     gdf['lon'] = gdf4326['lon']
     gdf['lat'] = gdf4326['lat']
     
-    output_geojson_filepath = os.path.join(file_directory, f"pinpile_center_{date_str}.geojson")
+    output_geojson_filepath = os.path.join(file_directory, f"hl_pinpile_center_{date_str}.geojson")
     gdf.to_file(output_geojson_filepath, driver='GeoJSON')
     
     with open(output_geojson_filepath, 'r', encoding='utf-8') as f:
@@ -124,7 +140,7 @@ def process_csv_file(input_filepath):
     gdf4326['Lontitude'] = gdf4326['lon'].apply(convert_to_ddmmss)
     gdf4326['Latitude'] = gdf4326['lat'].apply(convert_to_ddmmss)
     
-    df_processed = pd.concat([df.drop(columns=['geometry', 'ins_date']), gdf4326[['lon', 'lat', 'Lontitude', 'Latitude']]], axis=1)
+    df_processed = pd.concat([df, gdf4326[['lon', 'lat', 'Lontitude', 'Latitude']]], axis=1)
     
     output_excel_filepath = os.path.join(file_directory, f"pinpile_center_{date_str}.xlsx")
     with pd.ExcelWriter(output_excel_filepath, engine='openpyxl') as writer:
