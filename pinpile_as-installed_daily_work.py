@@ -53,7 +53,7 @@ def process_excel_file(input_filepath):
     gdf['lon'] = gdf4326['lon']
     gdf['lat'] = gdf4326['lat']
     
-    output_geojson_filepath = os.path.join(file_directory, f"pile_location_as_install_{date_str}.geojson")
+    output_geojson_filepath = os.path.join(file_directory, f"pile_location_as_installed_{date_str}.geojson")
     process_geojson(gdf, output_geojson_filepath, file_basename)
     
     gdf['buffer'] = gdf.geometry.buffer(1.75, resolution=100, cap_style=1)
